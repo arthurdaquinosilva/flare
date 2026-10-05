@@ -1,5 +1,7 @@
 # flare
 
+![flare's startup screen: the pixel wordmark, project info, input bar, key bar and status line](https://raw.githubusercontent.com/arthurdaquinosilva/flare/main/docs/screenshot.png)
+
 **A calm, beautiful terminal client for HTTP requests.** ember's look — the pixel wordmark, filled input bar, key bar and vi mode line — built around sending requests and reading responses.
 
 - **Paste curl, or don't.** `curl -X GET https://api.dev/users` works as-is, and so does `GET api.dev/users`.
