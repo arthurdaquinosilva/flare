@@ -9,8 +9,24 @@ description = "A calm, beautiful terminal client for HTTP requests, with per-pro
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
+license-files = ["LICENSE"]
 authors = [{ name = "Arthur D'Aquino", email = "arthurdaquinosilva@gmail.com" }]
-keywords = ["http", "curl", "rest", "api", "cli", "terminal", "tui"]
+keywords = ["http", "curl", "rest", "api", "cli", "terminal", "tui", "httpie"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Software Development :: Testing",
+    "Topic :: Terminals",
+]
 dependencies = [
     "prompt_toolkit>=3.0.43",
     "rich>=13.8",
@@ -20,7 +36,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "pyflakes"]
+dev = ["pytest", "pyflakes", "build", "twine"]
+
+[project.urls]
+Homepage = "https://github.com/arthurdaquinosilva/flare"
+Issues = "https://github.com/arthurdaquinosilva/flare/issues"
+Changelog = "https://github.com/arthurdaquinosilva/flare/blob/main/CHANGELOG.md"
 
 [project.scripts]
 flare = "flare.cli:main"

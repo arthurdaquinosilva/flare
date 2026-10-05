@@ -10,10 +10,11 @@
 ## Install
 
 ```sh
-pipx install -e .          # from this folder; puts `flare` on your PATH
+pipx install flare-http    # the `flare` command everywhere, isolated from your projects
+pip install flare-http     # or into the current environment
 ```
 
-Requires Python 3.10+.
+The package is `flare-http` on PyPI (`flare` was taken); the command is `flare`. Requires Python 3.10+ on macOS or Linux.
 
 ## Quick tour
 
@@ -73,6 +74,8 @@ max_lines = 300        # longer bodies are cut; /body shows everything
 ```
 
 ## Development
+
+Releases go to PyPI from GitHub; see [docs/releasing.md](https://github.com/arthurdaquinosilva/flare/blob/main/docs/releasing.md).
 
 ```sh
 python -m venv .venv && .venv/bin/pip install -e '.[dev]'
