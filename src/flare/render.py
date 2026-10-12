@@ -120,7 +120,7 @@ def kind_label(response: httpx.Response) -> str:
 def echo(text: str, theme: Theme, alias_target: str | None = None) -> RenderableType:
     """The input line above a response: `> GET https://…`, or `> /alias  GET https://…`."""
     line = Text()
-    line.append("> ", style="flare.accent.bold")
+    line.append("> ", style="flare.muted")
     first, _, rest = text.strip().partition(" ")
     if first.startswith("/"):
         line.append(first, style="flare.label")
@@ -164,7 +164,7 @@ def request_block(ex: Exchange, theme: Theme) -> list[RenderableType]:
 
 
 def response_blocks(ex: Exchange, theme: Theme, show_headers: bool, max_lines: int | None) -> list[RenderableType]:
-    """Everything that goes on the rail: optional request, headers, then the body."""
+    """Everything shown for a response: optional request, headers, then the body."""
     resp = ex.response
     out: list[RenderableType] = []
     if ex.spec.verbose:
@@ -208,7 +208,8 @@ def body_renderable(resp: httpx.Response, theme: Theme, max_lines: int | None) -
 
 
 def footer(ex: Exchange | None, theme: Theme, error: str | None = None) -> Text:
-    parts: list[tuple[str, str]] = [("╰─ ", "flare.border")]
+    """The status line under a response: `✓ 200 OK · 12ms · 1.2 KB · json`."""
+    parts: list[tuple[str, str]] = []
     if error or ex is None:
         return Text.assemble(*parts, ("✗ ", "flare.err.bold"), (error or "failed", "flare.err"))
     resp = ex.response

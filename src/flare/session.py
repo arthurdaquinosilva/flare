@@ -6,8 +6,9 @@ import os
 import sys
 import threading
 import time
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Callable, Mapping
+from typing import Callable, Iterator, Mapping
 
 import httpx
 from rich.console import Console, RenderableType
@@ -16,13 +17,14 @@ from rich.table import Table
 from rich.text import Text
 
 from flare import render
+from flare.block import BlockWriter
 from flare.client import Exchange, RequestError, send
 from flare.config import Settings
 from flare.project import AliasError, AliasStore, Project, expand, placeholders, short_path
 from flare.request import ParseError, parse, split_command
 from flare.theme import PALETTES, get_theme
 
-FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+FRAMES = ("·", "✢", "✳", "✶", "✻", "✽", "✻", "✶", "✳", "✢")
 
 # name → (arguments, description). Aliases may not reuse these names.
 COMMANDS: dict[str, tuple[str, str]] = {
@@ -105,26 +107,26 @@ class Session:
 
     def note(self, message: str, ok: bool = True, detail: str = "") -> None:
         mark = ("✓ ", "flare.ok") if ok else ("✗ ", "flare.err.bold")
-        self.console.print(Text.assemble(("  ", ""), mark, (message, "flare.fg" if ok else "flare.err"), (detail, "flare.muted")))
-        self.console.print()
+        self.console.print(Text.assemble(mark, (message, "flare.fg" if ok else "flare.err"), (detail, "flare.muted")))
 
     def _ansi(self, text: Text) -> str:
         with self.console.capture() as cap:
             self.console.print(text, end="")
         return cap.get()
 
-    def rail(self, renderables: list[RenderableType]) -> None:
-        """Print renderables indented behind a thin left rail, as ember does for cell output."""
-        prefix = self._ansi(Text("│ ", style="flare.border"))
-        width = max(20, self.console.width - 2)
-        with self.console.capture() as cap:
-            for r in renderables:
-                self.console.print(r, width=width)
-        lines = cap.get().rstrip("\n").split("\n")
-        bare = prefix.rstrip(" ") if prefix.strip() else ""
-        out = [bare] + [prefix + line if line.strip() else bare for line in lines] + [bare]
-        self.console.file.write("\n".join(out) + "\n")
-        self.console.file.flush()
+    @contextmanager
+    def block(self) -> Iterator[None]:
+        """Everything printed inside hangs under a `  ⎿  ` marker, five columns in."""
+        console = self.console
+        real, saved_width = console.file, getattr(console, "_width", None)
+        writer = BlockWriter(real)
+        console.file = writer
+        console.width = max(20, console.width - len(writer.rest))
+        try:
+            yield
+        finally:
+            console.file = real
+            console._width = saved_width  # back to following the terminal size
 
     # ── dispatch ──────────────────────────────────────────────────────────
 
@@ -133,8 +135,27 @@ class Session:
         stripped = text.strip()
         if not stripped:
             return True
+        if self.raw:
+            return self._dispatch(stripped)
+        self.console.print(render.echo(stripped, self.theme, self._alias_target(stripped)))
+        with self.block():
+            ok = self._dispatch(stripped)
+        self.console.print()
+        return ok
+
+    def _alias_target(self, text: str) -> str | None:
+        if not text.startswith("/"):
+            return None
+        name = text[1:].partition(" ")[0]
+        command = None if name in COMMANDS else self.store.get(name)
+        if command is None:
+            return None
+        method, url, _ = describe(command)
+        return f"{method} {url}".strip()
+
+    def _dispatch(self, stripped: str) -> bool:
         if not stripped.startswith("/"):
-            return self.request(stripped, stripped)
+            return self.request(stripped)
         name, _, rest = stripped[1:].partition(" ")
         name, rest = name.strip(), rest.strip()
         if name in COMMANDS:
@@ -150,20 +171,14 @@ class Session:
         try:
             filled = expand(command, split_command(rest))
         except (AliasError, ParseError) as e:
-            self.print(render.echo(stripped, self.theme), render.footer(None, self.theme, f"/{name}: {e}"))
-            self.console.print()
+            self.print(render.footer(None, self.theme, f"/{name}: {e}"))
             return False
-        return self.request(stripped, filled, alias=True)
+        return self.request(filled)
 
-    def request(self, shown: str, command: str, alias: bool = False) -> bool:
+    def request(self, command: str) -> bool:
         self.count += 1
         if self.raw:
             return self._request_raw(command)
-        target = None
-        if alias:
-            method, url, _ = describe(command)
-            target = f"{method} {url}".strip()
-        self.print(render.echo(shown, self.theme, target))
         try:
             spec = parse(command, self.env)
         except ParseError as e:
@@ -176,11 +191,9 @@ class Session:
             return self._fail("cancelled")
         self.last, self.last_command = ex, command
         self.last_ok = ex.response.status_code < 400
-        blocks = render.response_blocks(ex, self.theme, self.settings.headers, self.settings.max_lines)
-        if blocks:
-            self.rail(blocks)
+        for block in render.response_blocks(ex, self.theme, self.settings.headers, self.settings.max_lines):
+            self.console.print(block)
         self.print(render.footer(ex, self.theme))
-        self.console.print()
         self.on_change()
         return self.last_ok
 
@@ -202,7 +215,6 @@ class Session:
     def _fail(self, error: str) -> bool:
         self.last_ok = False
         self.print(render.footer(None, self.theme, error))
-        self.console.print()
         self.on_change()
         return False
 
@@ -210,7 +222,7 @@ class Session:
         if not self.console.is_terminal:
             return send(spec, self.settings.timeout, self.transport)
         stop = threading.Event()
-        file = self.console.file
+        file = getattr(self.console.file, "real", self.console.file)  # the spinner sits outside the ⎿ block
         host = httpx.URL(spec.url).host
 
         def spin() -> None:
@@ -220,9 +232,8 @@ class Session:
                 if elapsed < 0.15:
                     continue
                 line = Text.assemble(
-                    ("╰─ ", "flare.border"), (FRAMES[i % len(FRAMES)], "flare.accent"),
-                    (f" {spec.method} {host} ", "flare.muted"), (render.format_duration(elapsed), "flare.faint"),
-                    ("  ctrl+c to cancel", "flare.faint"),
+                    (FRAMES[i % len(FRAMES)] + " ", "flare.accent"), (f"{spec.method} {host}…", "flare.accent"),
+                    (f" ({render.format_duration(elapsed)} · ctrl+c to cancel)", "flare.faint"),
                 )
                 file.write("\r\x1b[2K" + self._ansi(line))
                 file.flush()
@@ -255,9 +266,8 @@ class Session:
             saved = self.store.get(name)
             if saved is None:
                 raise AliasError(f"no alias /{name} in this project")
-            self.print(Text.assemble(("  /", "flare.label"), (name, "flare.label")))
-            self.print(Syntax("  " + saved, "bash", theme=self.theme.syntax_theme, background_color="default", word_wrap=True))
-            self.console.print()
+            self.print(Text.assemble(("/", "flare.label"), (name, "flare.label")))
+            self.print(Syntax(saved, "bash", theme=self.theme.syntax_theme, background_color="default", word_wrap=True))
             return True
         if command.startswith("/"):
             raise AliasError("an alias can't point at another alias or command")
@@ -297,9 +307,8 @@ class Session:
                 Text(url, style="flare.fg"),
                 Text(extras, style="flare.faint"),
             )
-        self.console.print(Text.assemble(("  aliases", "flare.accent.bold"), (f"  ·  {self.project.name}", "flare.muted")))
-        self.console.print()
-        self.rail([table])
+        self.console.print(Text.assemble(("aliases", "flare.accent.bold"), (f"  ·  {self.project.name}", "flare.muted")))
+        self.console.print(table)
         return True
 
     def cmd_unalias(self, arg: str) -> bool:
@@ -375,9 +384,8 @@ class Session:
             ("Root", short_path(self.project.root)),
             ("Aliases", f"{n} · {short_path(self.project.aliases_file)}"),
         ):
-            grid.add_row(Text("  " + key, style="flare.fg"), Text(value, style="flare.label"))
+            grid.add_row(Text(key, style="flare.fg"), Text(value, style="flare.label"))
         self.print(grid)
-        self.console.print()
         return True
 
     def cmd_clear(self, arg: str) -> bool:
@@ -389,8 +397,13 @@ class Session:
         return True
 
     def cmd_help(self, arg: str) -> bool:
+        first = [True]
+
         def section(title: str) -> None:
-            self.console.print(Text("  " + title, style="flare.accent.bold"))
+            if not first[0]:
+                self.console.print()
+            first[0] = False
+            self.console.print(Text(title, style="flare.accent.bold"))
 
         def rows(items: list[tuple[str, str]]) -> None:
             grid = Table.grid(padding=(0, 2))
@@ -399,7 +412,6 @@ class Session:
             for key, desc in items:
                 grid.add_row(Text("  " + key, style="flare.label"), Text(desc, style="flare.muted"))
             self.print(grid)
-            self.console.print()
 
         section("requests")
         rows([
@@ -427,7 +439,8 @@ class Session:
             ("↑ ↓ · Ctrl+R", "history · search history"),
             ("Ctrl+O", "edit the input in $EDITOR"),
             ("Esc · i", "vi normal · insert mode (/mode vi)"),
-            ("Ctrl+C · Ctrl+D", "clear input or cancel a request · exit"),
+            ("?", "shortcuts (on an empty prompt)"),
+            ("Ctrl+C · Ctrl+D", "clear input or cancel a request; twice on an empty prompt to exit · exit"),
         ])
         return True
 

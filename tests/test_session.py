@@ -13,7 +13,9 @@ def test_request_is_sent_and_shown(session):
     assert sent["body"] == {"name": "ada"}
     out = output(session)
     assert '"name": "ada"' in out
-    assert "╰─ ✓ 200 OK" in out
+    assert out.startswith("> curl -X POST api.dev/users")
+    assert "\n  ⎿  " in out  # the response hangs under the echoed input
+    assert "\n     ✓ 200 OK" in out
 
 
 def test_alias_lifecycle(session, project):
@@ -70,3 +72,8 @@ def test_alias_with_fields(session):
     session.run("/alias create_user POST api.dev/users")
     assert session.run("/create_user name=ada age:=36")  # fields appended to an alias without placeholders
     assert json.loads(session.last.response.text)["body"] == {"name": "ada", "age": 36}
+
+
+def test_every_input_is_echoed_with_its_output_under_it(session):
+    session.run("/headers off")
+    assert output(session) == "> /headers off\n  ⎿  ✓ headers hidden\n\n"

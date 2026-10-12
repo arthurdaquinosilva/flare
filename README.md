@@ -2,10 +2,10 @@
 
 ![flare's startup screen: the pixel wordmark, project info, input bar, key bar and status line](https://raw.githubusercontent.com/arthurdaquinosilva/flare/main/docs/screenshot.png)
 
-**A calm, beautiful terminal client for HTTP requests.** ember's look — the pixel wordmark, filled input bar, key bar and vi mode line — built around sending requests and reading responses.
+**A calm, beautiful terminal client for HTTP requests.** querky's look — the pixel wordmark, the input between two rules, a one-line footer with `? for shortcuts` and vi's `-- INSERT --` — built around sending requests and reading responses.
 
 - **Paste curl, or don't.** `curl -X GET https://api.dev/users` works as-is, and so does `GET api.dev/users`.
-- **Readable responses.** Status, headers and a re-indented, highlighted body (JSON, HTML, XML, YAML…) on a rail, with a footer for status, time, size and type.
+- **Readable responses.** Status, headers and a re-indented, highlighted body (JSON, HTML, XML, YAML…) under a `⎿`, with a status line for status, time, size and type.
 - **Aliases per project.** `/alias get_all_users GET api.dev/users`, then just `/get_all_users`. Each git repository has its own aliases.
 - **Keys you know.** vi or emacs bindings, history with search, completion for commands, aliases, methods and flags.
 

@@ -1,9 +1,10 @@
-"""The interactive prompt: ember's filled input bar, key bar and mode line, for HTTP."""
+"""The interactive prompt, in querky's style: a ruled input, a one-line footer and `?` for shortcuts."""
 
 from __future__ import annotations
 
 import re
 import sys
+import threading
 import time
 from typing import Iterable
 
@@ -23,7 +24,7 @@ from prompt_toolkit.key_binding.bindings.auto_suggest import load_auto_suggest_b
 from prompt_toolkit.key_binding.key_bindings import merge_key_bindings
 from prompt_toolkit.key_binding.vi_state import InputMode
 from prompt_toolkit.keys import Keys
-from prompt_toolkit.layout import ConditionalContainer, Float, FloatContainer, FormattedTextControl, HSplit, Layout, VSplit, Window
+from prompt_toolkit.layout import ConditionalContainer, FormattedTextControl, HSplit, Layout, VSplit, Window
 from prompt_toolkit.layout.controls import BufferControl
 from prompt_toolkit.layout.dimension import Dimension
 from prompt_toolkit.layout.menus import CompletionsMenu
@@ -42,6 +43,7 @@ from flare.session import COMMANDS, Session, describe
 from flare.theme import PALETTES
 
 MENU_HEIGHT = 8
+EXIT_WINDOW = 1.5  # seconds a first Ctrl+C on an empty prompt waits for the second
 
 # Same trick as ember: ask for xterm's modifyOtherKeys so Shift+Enter can insert a newline.
 ENABLE_MODIFIED_KEYS = "\x1b[>4;1m"
@@ -206,6 +208,9 @@ class Repl:
         self.session = session
         self.warnings = warnings or []
         self.flash: tuple[str, float] | None = None
+        self.exit_armed_until = 0.0
+        self.show_shortcuts = False
+        self._keep_shortcuts = False  # set by the `?` key so the after-key hook doesn't close the panel at once
         self.shift_enter_works = False
         try:
             session.project.ensure()
@@ -227,7 +232,6 @@ class Repl:
     # ── layout ────────────────────────────────────────────────────────────
 
     def _build_app(self) -> Application:
-        pad = lambda **kw: Window(style="class:bar", **kw)  # noqa: E731
         input_window = Window(
             BufferControl(
                 buffer=self.buffer,
@@ -236,30 +240,22 @@ class Repl:
             ),
             height=Dimension(min=1, max=16),
             wrap_lines=True,
-            get_line_prefix=self._bar_prefix,
+            get_line_prefix=self._prompt_prefix,
             dont_extend_height=True,
-            style="class:bar",
         )
-        bar = HSplit([
-            pad(height=1),
-            VSplit([
-                pad(width=2),
-                input_window,
-                Window(FormattedTextControl(self._bar_counter), dont_extend_width=True, style="class:bar"),
-                pad(width=2),
-            ]),
-            pad(height=1),
-        ])
-        keybar = Window(FormattedTextControl(self._keybar), height=1)
-        modeline = Window(FormattedTextControl(self._modeline), height=1)
-        reserve = ConditionalContainer(Window(height=MENU_HEIGHT), filter=has_completions)
-        body = HSplit([bar, Window(height=1), keybar, Window(height=1), modeline, reserve])
-        root = FloatContainer(
-            content=body,
-            floats=[Float(xcursor=True, ycursor=True, content=CompletionsMenu(max_height=MENU_HEIGHT, scroll_offset=1))],
+        rule = lambda: Window(char="─", height=1, style="class:rule")  # noqa: E731
+        shortcuts = Condition(lambda: self.show_shortcuts)
+        menu = ConditionalContainer(
+            VSplit([Window(width=2), CompletionsMenu(max_height=MENU_HEIGHT, scroll_offset=1)]),
+            filter=has_completions,
         )
+        panel = ConditionalContainer(
+            Window(FormattedTextControl(self._shortcuts_panel), dont_extend_height=True),
+            filter=shortcuts & ~has_completions,
+        )
+        footer = ConditionalContainer(Window(FormattedTextControl(self._footer), height=1), filter=~shortcuts & ~has_completions)
         app = Application(
-            layout=Layout(root),
+            layout=Layout(HSplit([rule(), input_window, rule(), menu, panel, footer])),
             key_bindings=self._bindings(),
             style=DynamicStyle(lambda: self.session.theme.pt_style),
             include_default_pygments_style=False,
@@ -268,71 +264,77 @@ class Repl:
             cursor=ModalCursorShapeConfig(),
         )
         app.ttimeoutlen = 0.05
-        app.key_processor.after_key_press += lambda _: app.invalidate()
+        app.key_processor.after_key_press += self._after_key
         return app
 
-    def _bar_prefix(self, line_number: int, wrap_count: int) -> StyleAndTextTuples:
-        if wrap_count:
-            return [("class:bar.cont", "  ")]
-        return [("class:bar.prompt", "> ")] if line_number == 0 else [("class:bar.cont", "· ")]
+    def _after_key(self, _processor) -> None:
+        if self._keep_shortcuts:
+            self._keep_shortcuts = False
+        else:
+            self.show_shortcuts = False
+        self.app.invalidate()
 
-    def _bar_counter(self) -> StyleAndTextTuples:
-        return [("class:bar.count", f"  [{self.session.count + 1}]")]
+    def _prompt_prefix(self, line_number: int, wrap_count: int) -> StyleAndTextTuples:
+        if line_number == 0 and not wrap_count:
+            return [("class:prompt", "> ")]
+        return [("class:prompt.cont", "  ")]
 
     def _vi_mode(self) -> str | None:
         if self.app.editing_mode != EditingMode.VI:
             return None
+        if self.buffer.selection_state:
+            return "VISUAL"
         mode = self.app.vi_state.input_mode
         return "NORMAL" if mode == InputMode.NAVIGATION else "REPLACE" if mode == InputMode.REPLACE else "INSERT"
 
-    def keybar_items(self) -> list[tuple[str, str]]:
-        if self.buffer.complete_state:
-            return [("NEXT", "Tab"), ("ACCEPT", "Enter"), ("CLOSE", "Esc")]
-        items: list[tuple[str, str]] = []
-        mode = self._vi_mode()
-        if mode == "INSERT":
-            items.append(("NORMAL MODE", "Esc"))
-        elif mode:
-            items.append(("INSERT MODE", "i"))
-        if not is_complete(self.buffer.text):
-            items.append(("NEWLINE", "Enter"))
-        else:
-            items.append(("SEND", "Enter"))
-        if self.session.last_command is not None:
-            items.append(("SAVE AS ALIAS", "/save name"))
-        items += [("ALIASES", "/aliases"), ("HELP", "/help"), ("EXIT", "Ctrl+D")]
-        if is_complete(self.buffer.text):
-            items.append(("NEWLINE", "Shift+Enter" if self.shift_enter_works else "Alt+Enter"))
-        return items  # least important last: they're dropped first on narrow terminals
+    def shortcut_items(self) -> list[tuple[str, str]]:
+        """(key, what it does) for the `?` panel."""
+        newline = "shift+enter" if self.shift_enter_works else "alt+enter"
+        items = [
+            ("enter", "send · a trailing \\ continues"),
+            (newline, "new line"),
+            ("tab", "complete"),
+            ("→", "accept the grey suggestion"),
+            ("↑ ↓", "history"),
+            ("ctrl+r", "search history"),
+            ("ctrl+o", "edit in $EDITOR"),
+            ("/save name", "save the last request"),
+            ("/aliases", "this project's aliases"),
+            ("/help", "requests, commands, keys"),
+            ("ctrl+c", "clear input / exit"),
+            ("ctrl+d", "exit"),
+        ]
+        if self._vi_mode():
+            items.insert(2, ("esc", "NORMAL mode"))
+        return items
 
-    def _keybar(self) -> StyleAndTextTuples:
-        width = self.app.output.get_size().columns - 4
-        items = self.keybar_items()
-
-        def draw(entries: list[tuple[str, str]]) -> StyleAndTextTuples:
-            out: StyleAndTextTuples = [("", "  ")]
-            for i, (label, key) in enumerate(entries):
-                if i:
-                    out.append(("class:keybar.sep", "  |  "))
-                out += [("class:keybar.label", label), ("class:keybar.key", f": {key}")]
-            return out
-
-        while len(items) > 1 and _width(draw(items)) > width + 2:
-            items.pop()
-        return draw(items)
-
-    def _modeline(self) -> StyleAndTextTuples:
+    def _shortcuts_panel(self) -> StyleAndTextTuples:
+        items = self.shortcut_items()
+        col = max(get_cwidth(k) + get_cwidth(d) + 1 for k, d in items) + 4
+        per_row = max(1, min(3, (self.app.output.get_size().columns - 2) // col))
         out: StyleAndTextTuples = []
-        if mode := self._vi_mode():
-            out += [("class:modeline.mode", f"[{mode}]"), ("", "  ")]
-        else:
+        for i in range(0, len(items), per_row):
             out.append(("", "  "))
+            for key, desc in items[i : i + per_row]:
+                out += [("class:shortcut.key", key), ("class:shortcut.desc", " " + desc), ("", " " * (col - get_cwidth(key) - get_cwidth(desc) - 1))]
+            out.append(("", "\n"))
+        return out[:-1]
+
+    def _footer_left(self) -> StyleAndTextTuples:
         if self.flash and time.monotonic() < self.flash[1]:
-            return out + [("class:status.warn", self.flash[0])]
+            return [("class:status.warn", self.flash[0])]
+        mode = self._vi_mode()
+        if mode == "NORMAL":
+            return []
+        if mode:
+            return [("class:footer.mode", f"-- {mode} --")]
+        return [("class:footer.hint", "? for shortcuts")]
+
+    def _status(self) -> StyleAndTextTuples:
         s = self.session
         sep = ("class:status.sep", "  ·  ")
         n = len(s.store)
-        out += [("class:status", s.project.name), sep, ("class:status", f"{n} alias{'es' if n != 1 else ''}")]
+        out: StyleAndTextTuples = [("class:status", s.project.name), sep, ("class:status", f"{n} alias{'es' if n != 1 else ''}")]
         if s.last is not None and s.last_ok is not None:
             resp = s.last.response
             mark = ("class:status.ok", "✓ ") if s.last_ok else ("class:status.err", "✗ ")
@@ -341,8 +343,18 @@ class Repl:
             out += [sep, ("class:status.err", "✗ "), ("class:status", "failed")]
         if not s.settings.headers:
             out += [sep, ("class:status.dim", "headers hidden")]
+        return out
+
+    def _footer(self) -> StyleAndTextTuples:
         width = self.app.output.get_size().columns - 1
-        return out if _width(out) <= width else _truncate(out, width)
+        left = [("", "  "), *self._footer_left()]
+        right = self._status()
+        room = width - _width(left) - 2
+        if room < 8:
+            return _truncate(left, width) if _width(left) > width else left
+        if _width(right) > room:
+            right = _truncate(right, room)
+        return [*left, ("", " " * (width - _width(left) - _width(right))), *right]
 
     # ── keys ──────────────────────────────────────────────────────────────
 
@@ -401,13 +413,26 @@ class Repl:
                 event.app.vi_state.input_mode = InputMode.NAVIGATION
                 b.cursor_position += b.document.get_cursor_left_position()
 
+        @kb.add("?", filter=focused & insert_mode & Condition(lambda: not self.buffer.text))
+        def _shortcuts(event: KeyPressEvent) -> None:
+            self.show_shortcuts = not self.show_shortcuts
+            self._keep_shortcuts = True
+
         @kb.add("c-c", filter=focused)
         def _ctrl_c(event: KeyPressEvent) -> None:
             b = event.current_buffer
             if b.text:
                 b.reset()
-            else:
-                self.flash = ("press ctrl+d to exit", time.monotonic() + 2.5)
+                return
+            now = time.monotonic()
+            if now < self.exit_armed_until:
+                event.app.exit(result=None)
+                return
+            self.exit_armed_until = now + EXIT_WINDOW
+            self.flash = ("Press Ctrl-C again to exit", self.exit_armed_until)
+            timer = threading.Timer(EXIT_WINDOW, event.app.invalidate)  # take the notice down on time
+            timer.daemon = True
+            timer.start()
 
         @kb.add("c-d", filter=focused & Condition(lambda: not self.buffer.text))
         def _ctrl_d(event: KeyPressEvent) -> None:

@@ -28,3 +28,15 @@ def test_units():
     assert format_size(2048) == "2.0 KB"
     assert format_duration(0.1234) == "123ms"
     assert format_duration(2.5) == "2.50s"
+
+
+def test_block_writer_hangs_output_under_a_marker():
+    import io
+
+    from flare.block import BlockWriter
+
+    real = io.StringIO()
+    w = BlockWriter(real)
+    w.write("first\nsecond\n\n")
+    w.write("\x1b[2Kthird\n")
+    assert real.getvalue() == "  ⎿  first\n     second\n\n\x1b[2K     third\n"
