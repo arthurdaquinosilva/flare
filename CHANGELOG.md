@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0
+
+- **A new look**, in querky's style: the input sits between two horizontal rules, with a one-line footer under them instead of the filled bar, key bar and mode line — `-- INSERT --` in vi mode or `? for shortcuts` on the left, the project, its aliases and the last status on the right. `?` on an empty prompt lists the shortcuts, and completions are a plain list under the prompt.
+- **Responses without a rail**: every input is echoed as `> …`, and what it printed hangs under a `⎿` marker, five columns in — the response, then its status line (`✓ 200 OK · 12ms · 288 B · json`). Command output (`/aliases`, `/help`, …) hangs under its input the same way. The spinner reads `✻ GET host… (1.2s · ctrl+c to cancel)`.
+- Ctrl+C on an empty prompt now exits on a second press within 1.5 seconds; Ctrl+D still exits.
+
 ## 0.1.0
 
 First release.
