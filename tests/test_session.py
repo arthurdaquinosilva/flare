@@ -57,7 +57,7 @@ def test_binary_body_and_write(session, tmp_path):
 
 def test_settings_commands(session):
     assert session.run("/headers off") and not session.settings.headers
-    assert session.run("/theme nebula") and session.theme.name == "nebula"
+    assert session.run("/theme pitch") and session.theme.name == "pitch"
     assert not session.run("/theme nope")
     assert session.run("/mode vi") and session.settings.editing_mode == "vi"
     assert session.run("/help") and session.run("/project") and session.run("/aliases")

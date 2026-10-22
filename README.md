@@ -58,7 +58,7 @@ A project is the git repository you're in, or the current directory outside one 
 
 ```sh
 flare                              # interactive
-flare --vi --theme nebula          # vi keys, another theme (void, nebula, matrix)
+flare --vi                         # vi keys
 flare GET api.dev/users            # send one request and exit (status 1 on errors or 4xx/5xx)
 flare /get_all_users | jq .        # piped output is the bare response body
 ```
@@ -68,7 +68,7 @@ flare /get_all_users | jq .        # piped output is the bare response body
 `~/.config/flare/config.toml`:
 
 ```toml
-theme = "void"         # void, nebula, matrix
+theme = "pitch"        # the only theme for now
 editing_mode = "vi"    # or emacs
 headers = true         # show response headers
 timeout = 30           # seconds

@@ -1,6 +1,6 @@
-"""Color palettes shared by the prompt (prompt_toolkit), output (rich) and syntax (pygments).
+"""The color palette shared by the prompt (prompt_toolkit), output (rich) and syntax (pygments).
 
-The palettes are ember's, so the two tools look like siblings.
+It is pitch, the palette every one of these tools shares; only the accent differs.
 """
 
 from __future__ import annotations
@@ -59,91 +59,38 @@ class Palette:
 
 
 PALETTES: dict[str, Palette] = {
-    # Near-black monochrome with a single warm accent.
-    "void": Palette(
-        name="void",
-        fg="#e7e7e7",
-        muted="#8b8b8b",
-        faint="#555555",
-        border="#3b3b3b",
-        surface="#161616",
-        selection="#2b2b2b",
-        bar="#24262b",
-        label="#86c7c0",
-        accent="#ff8a4c",
-        accent2="#ffc46b",
-        logo="#e879f9",
-        ok="#7ee2a8",
-        err="#ff6b6b",
-        warn="#f2c14e",
-        info="#7cc4ff",
-        keyword="#ff9e6b",
-        builtin="#7cc4ff",
-        function="#e7e7e7",
-        klass="#ffd08a",
-        string="#a8d8a0",
-        number="#f5a97f",
-        comment="#5f5f5f",
-        operator="#9a9a9a",
-        decorator="#c9a0ff",
-    ),
-    "nebula": Palette(
-        name="nebula",
-        fg="#e4e1f5",
-        muted="#8c87a8",
-        faint="#56516e",
-        border="#3a3552",
-        surface="#15131f",
-        selection="#2a2640",
-        bar="#262238",
-        label="#6ee7f9",
-        accent="#b18cff",
-        accent2="#6ee7f9",
-        logo="#e879f9",
-        ok="#6ee7b7",
-        err="#fb7185",
-        warn="#fcd34d",
-        info="#6ee7f9",
-        keyword="#c4a5ff",
-        builtin="#6ee7f9",
-        function="#f0ecff",
-        klass="#f9a8d4",
-        string="#86efac",
-        number="#fda4af",
-        comment="#5c5776",
-        operator="#a39fc0",
-        decorator="#f9a8d4",
-    ),
-    "matrix": Palette(
-        name="matrix",
-        fg="#d7f5dd",
-        muted="#7a9a80",
-        faint="#46604b",
-        border="#2e4533",
-        surface="#0f1a12",
-        selection="#1f3324",
-        bar="#18261c",
-        label="#5eead4",
-        accent="#4ade80",
-        accent2="#a3e635",
-        logo="#e879f9",
-        ok="#4ade80",
-        err="#f87171",
-        warn="#facc15",
-        info="#5eead4",
-        keyword="#4ade80",
-        builtin="#5eead4",
-        function="#ecfdf0",
-        klass="#a3e635",
-        string="#bef264",
-        number="#fde68a",
-        comment="#4b6b52",
-        operator="#8fb396",
-        decorator="#5eead4",
+    # pitch: cool blue/violet hues on a pitch-black terminal, shared by all the tools;
+    # each one gets its own accent (flare's is yellow).
+    "pitch": Palette(
+        name="pitch",
+        fg="#c0caf5",
+        muted="#737aa2",
+        faint="#565f89",
+        border="#2a2e42",
+        surface="#0b0d14",
+        selection="#161925",
+        bar="#161925",
+        label="#bb9af7",
+        accent="#e0af68",
+        accent2="#ff9e64",
+        logo="#e0af68",
+        ok="#9ece6a",
+        err="#f7768e",
+        warn="#e0af68",
+        info="#7aa2f7",
+        keyword="#bb9af7",
+        builtin="#7dcfff",
+        function="#7aa2f7",
+        klass="#73daca",
+        string="#9ece6a",
+        number="#ff9e64",
+        comment="#565f89",
+        operator="#a9b1d6",
+        decorator="#e0af68",
     ),
 }
 
-DEFAULT_THEME = "void"
+DEFAULT_THEME = "pitch"
 
 
 class Theme:

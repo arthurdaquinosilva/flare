@@ -14,7 +14,7 @@ EDITING_MODES = ("emacs", "vi")
 
 @dataclass
 class Settings:
-    theme: str = "void"
+    theme: str = "pitch"
     editing_mode: str = "emacs"
     headers: bool = True  # show response headers
     timeout: float = 30.0
