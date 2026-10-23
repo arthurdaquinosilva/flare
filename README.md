@@ -12,11 +12,17 @@
 ## Install
 
 ```sh
-pipx install flare-http    # the `flare` command everywhere, isolated from your projects
-pip install flare-http     # or into the current environment
+curl -fsSL https://raw.githubusercontent.com/arthurdaquinosilva/flare/main/install.sh | sh
 ```
 
-The package is `flare-http` on PyPI (`flare` was taken); the command is `flare`. Requires Python 3.10+ on macOS or Linux.
+The script downloads flare from GitHub into its own virtual environment (`~/.local/share/flare-http/venv`) and links the `flare` command into `~/.local/bin`, telling you if that isn't on your `PATH`. Run it again to upgrade to the latest code on `main`. Other options:
+
+```sh
+curl -fsSL .../install.sh | sh -s -- 0.2.0          # a specific release
+curl -fsSL .../install.sh | sh -s -- --uninstall    # remove it (config and aliases are kept)
+```
+
+flare isn't on PyPI; GitHub is the only place it's published. Requires Python 3.10+ on macOS or Linux.
 
 ## Quick tour
 
@@ -77,7 +83,7 @@ max_lines = 300        # longer bodies are cut; /body shows everything
 
 ## Development
 
-Releases go to PyPI from GitHub; see [docs/releasing.md](https://github.com/arthurdaquinosilva/flare/blob/main/docs/releasing.md).
+Releases are tagged on GitHub; see [docs/releasing.md](https://github.com/arthurdaquinosilva/flare/blob/main/docs/releasing.md).
 
 ```sh
 python -m venv .venv && .venv/bin/pip install -e '.[dev]'
